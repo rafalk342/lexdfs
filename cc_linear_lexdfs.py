@@ -19,8 +19,8 @@ class Vertex:
         self.reordered_edges = []
 
         # fields for refinement
-        self.partition_node = None
-        self.partition = None
+        self.partition_class_node = None
+        self.partition_class = None
         self.refined = False
 
     def __repr__(self):
@@ -30,12 +30,12 @@ class Vertex:
         self.edges.append(vertex)
 
 
-class Partition:
+class PartitionClass:
     def __init__(self, elements):
         # fields for keeping and splitting vertices
         self.elements = dllist()
         for u in elements:
-            u.partition_node = self.elements.append(u)
+            u.partition_class_node = self.elements.append(u)
         self.split_place = self.elements.first
         self.splittable = False
 
@@ -47,14 +47,14 @@ class Partition:
         return str(list(self.elements))
 
     def move_vertex(self, u):
-        if u.partition_node is self.split_place:
+        if u.partition_class_node is self.split_place:
             if self.split_place is self.elements.last:
                 self.splittable = False
                 return
             self.split_place = self.split_place.next
 
-        self.elements.remove(u.partition_node)
-        u.partition_node = self.elements.insert(u, self.split_place)
+        self.elements.remove(u.partition_class_node)
+        u.partition_class_node = self.elements.insert(u, self.split_place)
         self.splittable = True
 
     def split(self):
@@ -70,9 +70,9 @@ class Partition:
 
         return left
 
-    def update_partition_link(self, partition):
+    def update_partition_class_link(self, partition_class):
         for el in self.elements:
-            el.partition = partition
+            el.partition_class = partition_class
 
     def update_stack(self, modified_by: Vertex, point: Vertex):
         if self.last_modified_stack is modified_by:
@@ -83,7 +83,8 @@ class Partition:
 
 
 def create_bins(sigma):
-    """Parameters:
+    """
+    Parameters:
     sigma -an umbrella-free ordering of a graph
     Returns:
         a list of bins(double linked lists) with vertices
@@ -101,12 +102,13 @@ def create_bins(sigma):
     return bins
 
 
-def create_partition_classes(sigma: List[Vertex]):
-    """Parameters:
+def create_partition(sigma: List[Vertex]):
+    """
+    Parameters:
     sigma - an umbrella-free ordering of a graph
     graph - graph as a list of vertices
     """
-    partitions = []
+    partition = []
 
     bins = create_bins(sigma)
 
@@ -115,8 +117,8 @@ def create_partition_classes(sigma: List[Vertex]):
         if not bin:
             continue
 
-        partitions.append(Partition(bin))
-        partitions[-1].update_partition_link(partitions[-1])
+        partition.append(PartitionClass(bin))
+        partition[-1].update_partition_class_link(partition[-1])
 
         for u in bin:
             u.partitioned = True
@@ -127,12 +129,12 @@ def create_partition_classes(sigma: List[Vertex]):
                     bins[v.label].remove(v.bin_node)
                     v.label += 1
                     v.bin_node = bins[v.label].append(v)
-    return partitions
+    return partition
 
 
-def reorder_edges(partitions: List[Partition], graph: List[Vertex]):
-    for partition in partitions:
-        for u in partition.elements:
+def reorder_edges(partition: List[PartitionClass], graph: List[Vertex]):
+    for partition_class in partition:
+        for u in partition_class.elements:
             for v in u.edges:
                 v.reordered_edges.append(u)
 
@@ -140,30 +142,35 @@ def reorder_edges(partitions: List[Partition], graph: List[Vertex]):
         u.edges = u.reordered_edges
 
 
-def refine(partition):
-    """Parameters:
-    partition -  a partition class with vertices
+def refine(partition_class):
+    """
+    Parameters:
+    partition_class -  a partition class with vertices
     stack - a stack is lists of friends"""
-    partitions = dllist([partition])
-    partitions.first.value.update_partition_link(partitions.first)
+    partition = dllist([partition_class])
+    partition.first.value.update_partition_class_link(
+        partition.first)
 
-    while partition.stack:
-        top = partition.stack.pop()
+    while partition_class.stack:
+        top = partition_class.stack.pop()
         for u in top:
-            u.partition.value.move_vertex(u)
+            u.partition_class.value.move_vertex(u)
 
         for u in top:
-            if u.partition.value.splittable:
-                u.partition.value.splittable = False
-                left = u.partition.value.split()
-                u.partition = partitions.insert(Partition(left), u.partition)
-                u.partition.value.update_partition_link(u.partition)
+            if u.partition_class.value.splittable:
+                u.partition_class.value.splittable = False
+                left = u.partition_class.value.split()
+                u.partition_class = partition.insert(
+                    PartitionClass(left),
+                    u.partition_class)
+                u.partition_class.value.update_partition_class_link(
+                    u.partition_class)
 
-    for partition in partitions:
-        for u in partition.elements:
+    for partition_class in partition:
+        for u in partition_class.elements:
             u.refined = True
 
-    return [partition.elements for partition in partitions]
+    return [partition_class.elements for partition_class in partition]
 
 
 def set_up_graph():
@@ -196,8 +203,10 @@ def set_up_graph():
 
 
 def get_sigma_ordering(graph):
-    """For the graph in the example this is a correct umbrella-free ordering.
-    It is not implemented for others"""
+    """
+    For the graph in the example this is a correct umbrella-free ordering.
+    It is not implemented for others
+    """
     return graph
 
 
@@ -205,22 +214,22 @@ def main():
     graph = set_up_graph()
     sigma = get_sigma_ordering(graph)
 
-    partitions = create_partition_classes(sigma)
-    reorder_edges(partitions, graph)
+    partition = create_partition(sigma)
+    reorder_edges(partition, graph)
 
     lex_dfs_order = []
-    for partition in partitions:
-        refined = refine(partition)
+    for partition_class in partition:
+        refined = refine(partition_class)
 
         for ref in refined:
             for u in ref:
                 lex_dfs_order.append(u)
                 for v in u.edges:
                     if not v.refined:
-                        v.partition.update_stack(u, v)
-    print(lex_dfs_order)
+                        v.partition_class.update_stack(u, v)
+    return lex_dfs_order
 
 
 if __name__ == "__main__":
-    main()
+    print(main())
 
